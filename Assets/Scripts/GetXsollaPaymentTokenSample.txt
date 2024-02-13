@@ -1,0 +1,97 @@
+using System.Text;
+using System.Net.Http.Headers;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
+
+namespace My.Function
+{
+    public class GetXsollaPaymentToken
+    {
+        private readonly ILogger<GetXsollaPaymentToken> _logger;
+        
+        private const int PROJECT_ID = ""; // Your Xsolla project ID
+        private const string API_KEY = ""; // Your Xsolla API key
+        
+        public GetXsollaPaymentToken(ILogger<GetXsollaPaymentToken> logger)
+        {
+            _logger = logger;
+        }
+
+        [Function("GetXsollaPaymentToken")]
+        public async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Anonymous, "get", "post")] HttpRequest req)
+        {
+            _logger.LogInformation("GetXsollaPaymentToken function processed a request.");
+
+            // Reading the request body
+            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            _logger.LogInformation("Request body: " + requestBody);
+
+            // Deserializing request body JSON
+            dynamic data = JsonConvert.DeserializeObject(requestBody);
+
+            // Extracting necessary data from JSON
+            string uid = data.FunctionArgument.uid;
+            string sku = data.FunctionArgument.sku;
+            string returnUrl = data.FunctionArgument.returnUrl;
+
+            // Creating payload for Xsolla API
+            var payload = new
+            {
+                user = new
+                {
+                    id = new { value = uid },
+                    country = new { value = "US", allow_modify = false }
+                },
+                purchase = new
+                {
+                    items = new[]
+                    {
+                        new { sku = sku, quantity = 1 }
+                    }
+                },
+                sandbox = true,
+                settings = new
+                {
+                    language = "en",
+                    currency = "USD",
+                    return_url = returnUrl,
+                    ui = new { theme = "63295aab2e47fab76f7708e3" }
+                }
+            };
+
+            // Constructing Xsolla API URL
+            string url = $"https://store.xsolla.com/api/v3/project/{PROJECT_ID}/admin/payment/token";
+
+            // Sending request to Xsolla API
+            using (HttpClient client = new HttpClient())
+            {
+                // Adding authorization header
+                string headerValue = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{PROJECT_ID}:{API_KEY}"));
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", headerValue);
+                
+                // Serializing payload to JSON
+                var jsonPayload = JsonConvert.SerializeObject(payload);
+                var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+                
+                // Making POST request to Xsolla API
+                var xsollaRes = await client.PostAsync(url, content);
+
+                // Checking response from Xsolla API
+                if (xsollaRes.IsSuccessStatusCode)
+                {
+                    // Reading successful response content
+                    string responseContent = await xsollaRes.Content.ReadAsStringAsync();
+                    return new OkObjectResult(responseContent);
+                }
+                else
+                {
+                    // Returning status code in case of failure
+                    return new StatusCodeResult((int)xsollaRes.StatusCode);
+                }
+            }
+        }
+    }
+}
