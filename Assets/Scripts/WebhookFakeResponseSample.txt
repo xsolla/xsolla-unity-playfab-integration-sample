@@ -1,0 +1,24 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Extensions.Logging;
+
+namespace My.Functions
+{
+    public class WebhookFakeResponse
+    {
+        private readonly ILogger<WebhookFakeResponse> _logger;
+
+        public WebhookFakeResponse(ILogger<WebhookFakeResponse> logger)
+        {
+            _logger = logger;
+        }
+
+        [Function("WebhookFakeResponse")]
+        public IActionResult Run([HttpTrigger(AuthorizationLevel.Anonymous, "get", "post")] HttpRequest req)
+        {
+            _logger.LogInformation("WebhookFakeResponse function processed a request.");
+            return new OkResult();
+        }
+    }
+}
